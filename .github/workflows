@@ -1,0 +1,87 @@
+name: Deploy Environment
+
+on:
+  workflow_dispatch:
+    inputs:
+      ls6_accounting_komisk:
+        description: 'LS6 Accounting - Komisk'
+        type: boolean
+        default: false
+      ls6_global:
+        description: 'LS6 Global'
+        type: boolean
+        default: false
+
+jobs:
+  create-environment-matrix:
+    runs-on: windows-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Build Environment Matrix
+        id: set-matrix
+        shell: pwsh
+        run: |
+          $environments = @()
+          $envMap = @{
+            "ls6_accounting_komisk" = "LS6 Accounting - Komisk"
+            "ls6_global" = "LS6 Global"
+          }
+          foreach ($key in $envMap.Keys) {
+              $envVariableName = $key.ToUpper()
+              $inputValue = (Get-Item -Path "Env:\$envVariableName").Value
+              if ($inputValue -eq 'true') {
+                  $environments += $envMap[$key]
+              }
+          }
+          if ($environments.Count -eq 1) {
+              $matrixJson = @{ "include" = @(@{ "environment" = $environments[0] }) } | ConvertTo-Json -Depth 2 -Compress
+          } elseif ($environments.Count -gt 1) {
+              $matrixJson = @{ "include" = $environments | ForEach-Object { @{ "environment" = $_ } } } | ConvertTo-Json -Depth 2 -Compress
+          } else {
+              Write-Output "No environments selected. Exiting."
+              exit 1
+          }
+          Write-Output "matrix=$matrixJson" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+    env:
+      ls6_accounting_komisk: ${{ inputs.ls6_accounting_komisk }}
+      ls6_global: ${{ inputs.ls6_global }}
+
+  deploy:
+    needs: create-environment-matrix
+    strategy:
+      matrix: ${{ fromJson(needs.create-environment-matrix.outputs.matrix) }}
+      max-parallel: 1
+      fail-fast: false
+    runs-on: windows-latest
+    environment: ${{ matrix.environment }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up PowerShell
+        uses: actions/setup-powershell@v2
+        with:
+          pwsh-version: '7.2'
+
+      - name: Install PowerShell-YAML and AWS Tools
+        shell: pwsh
+        run: |
+          Install-Module -Name powershell-yaml -Force -Scope CurrentUser
+          Install-Module -Name AWSPowerShell -Force -Scope CurrentUser
+
+      - name: Generate Environment-Specific Config
+        shell: pwsh
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+        run: |
+          ./generate-config.ps1 -environment "${{ matrix.environment }}"
+
+      - name: Run PowerShell Script 1
+        shell: pwsh
+        run: |
+          . .\config.ps1
+          ./script1.ps1
