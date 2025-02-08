@@ -5,13 +5,12 @@ library_sets:
         value: "{{AWS:LS6_Accounting_Komisk_ServiceAccountPassword}}"
       "LS6 Global":
         value: "{{AWS:LS6_Global_ServiceAccountPassword}}"
+    value: "null"  # ✅ Default value (used when no environment is selected)
+
   ServiceAccountUserName:
     environments:
       "LS6 Accounting - Komisk":
-        value: "XOAWSUAT\svc_octopus_deploy"
+        value: "XOAWSUAT\\svc_octopus_deploy"
       "LS6 Global":
-        value: "XOAWSUAT\svc_octopus_deploy"
-  ServiceAccountPassword:
-    value: "null"
-  ServiceAccountUserName:
-    value: "DBPro"
+        value: "XOAWSUAT\\svc_octopus_deploy"
+    value: "DBPro"  # ✅ Default value (used when no environment is selected)
